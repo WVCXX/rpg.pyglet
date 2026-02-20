@@ -1,3 +1,48 @@
-pygame==2.5.2
+# requirements.txt
+# The Life and Suffering of Prince Jerian
+# Зависимости проекта
+
+# Основные зависимости
+tkinter==8.6
+Pillow==10.0.0
+pygame==2.5.0
 numpy==1.24.3
+python-dotenv==1.0.0
+
+# Для сохранения и загрузки
+pyyaml==6.0
+json5==0.9.14
+
+# Для GUI улучшений
+ttkthemes==3.2.2
+customtkinter==5.2.0
+
+# Для звука и музыки
+pygame==2.5.0
+simpleaudio==1.0.4
+
+# Для графики и анимаций
 pillow==10.0.0
+pyscreenshot==3.1
+
+# Для работы с файлами
+watchdog==3.0.0
+
+# Для логирования
+loguru==0.7.2
+
+# Для случайных событий
+random2==1.0.1
+
+# Для работы с датами
+python-dateutil==2.8.2
+
+# Для тестирования (опционально)
+pytest==7.4.0
+pytest-cov==4.1.0
+
+# Для производительности
+psutil==5.9.5
+
+# Команда для установки всех зависимостей:
+# pip install -r requirements.txt

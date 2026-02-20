@@ -30,3 +30,8 @@ build/
 
 logs/
 *.log
+
+tests.py
+crash_log.txt
+
+saves/
