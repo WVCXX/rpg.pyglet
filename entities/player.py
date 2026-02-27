@@ -31,3 +31,15 @@ class Player:
         if "ржавый меч" in self.data["inventory"]["weapons"]:
             return base + 3
         return base
+    
+    def take_damage(self, damage):
+        """Получение урона с учетом режима бога"""
+
+        if hasattr(self, 'game_window') and hasattr(self.game_window, 'godmode') and self.game_window.godmode:
+            return 0  
+    
+    # Обычная обработка урона
+        self.data["health"] -= damage
+        if self.data["health"] < 0:
+            self.data["health"] = 0
+            return damage
