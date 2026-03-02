@@ -11,10 +11,10 @@ class DynamicWorld:
         self.hour = 8
         self.minute = 0
         
-        self.season = self.get_season()  #ПЕРЕНЕСЕНО НАВЕРХ
+        self.season = self.get_season()
         
         self.weather = self.generate_weather()
-        self.weather_duration = random.randint(3, 12)  # часы
+        self.weather_duration = random.randint(3, 12) 
         self.weather_history = []
         
         self.time_of_day = self.get_time_of_day()
@@ -34,15 +34,11 @@ class DynamicWorld:
         self.global_events = []
         self.active_events = []
         
-
         self.moon_phase = random.randint(0, 3)  # 0-новолуние, 1-растущая, 2-полнолуние, 3-убывающая
         
-
         self.temperature = self.calculate_temperature()
-
         self.wind = self.generate_wind()
         
-
         self.visibility = self.calculate_visibility()
     
     def init_holidays(self) -> Dict[int, str]:
@@ -60,21 +56,21 @@ class DynamicWorld:
         }
     
     def generate_weather(self) -> str:
-        """Генерация погоды"""
+        """Генерация погоды с учетом сезона"""
         weathers = [
             "ясно", "облачно", "пасмурно", "дождь", "ливень",
             "гроза", "туман", "снег", "метель", "град",
             "морось", "ветрено", "штиль"
         ]
-        
+
         if self.season == "зима":
-            weights = [1, 2, 3, 1, 1, 0, 2, 4, 3, 1, 1, 2, 1]
+            weights = [1, 2, 3, 0, 0, 0, 2, 5, 4, 0, 0, 3, 1]
         elif self.season == "весна":
             weights = [2, 3, 3, 4, 2, 1, 3, 0, 0, 0, 3, 2, 1]
         elif self.season == "лето":
-            weights = [4, 3, 2, 2, 1, 3, 1, 0, 0, 0, 1, 2, 1]
+            weights = [4, 3, 2, 3, 2, 2, 1, 0, 0, 1, 1, 2, 1]
         else:  # осень
-            weights = [2, 3, 4, 3, 2, 1, 3, 1, 1, 0, 2, 3, 1]
+            weights = [2, 3, 4, 4, 2, 1, 3, 0, 0, 0, 2, 3, 1]
         
         return random.choices(weathers, weights=weights)[0]
     

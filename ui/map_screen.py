@@ -1,13 +1,29 @@
 import tkinter as tk
 import math
-
 class MapScreen:
     """Экран карты"""
-    def __init__(self, parent, world, current_location):
+    
+    _instance = None  
+    
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None or not cls._instance.window.winfo_exists():
+            cls._instance = super().__new__(cls)
+            return cls._instance
+        else:
+            cls._instance.window.lift()
+            cls._instance.window.focus_force()
+            return None
+    
+    def __init__(self, parent, world, current_location, game_window):
+        if hasattr(self, 'initialized') and self.initialized:
+            return
+            
         self.parent = parent
         self.world = world
         self.current_location = current_location
+        self.game = game_window
         self.window = None
+        self.initialized = True
         
         # цвета
         self.colors = {
@@ -21,7 +37,7 @@ class MapScreen:
             'current': '#ff0000'
         }
         
-        # координаты локаций (русифицированные)
+        # координаты локаций 
         self.locations_coords = {
             "городская_площадь": (400, 300),
             "таверна": (350, 350),
@@ -44,6 +60,8 @@ class MapScreen:
             "пещеры": (150, 300)
         }
         
+        self.show()
+    
     def show(self):
         """Показать карту"""
         self.window = tk.Toplevel(self.parent)
@@ -58,8 +76,7 @@ class MapScreen:
         tk.Label(title_frame, text="🗺 КАРТА МИРА",
                 bg='#1a1a1a', fg='#ffd700',
                 font=('Arial', 16, 'bold')).pack(pady=10)
-        
-        # canvas для карты
+
         map_frame = tk.Frame(self.window, bg=self.colors['bg_dark'])
         map_frame.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
         
@@ -70,7 +87,7 @@ class MapScreen:
         # отрисовка карты
         self.draw_map()
         
-        # информация
+        self.canvas.bind('<Button-1>', self.on_map_click)
         info_frame = tk.Frame(self.window, bg='#1a1a1a')
         info_frame.pack(fill=tk.X, padx=10, pady=5)
         
@@ -86,11 +103,43 @@ class MapScreen:
                 text=f"📍 Текущая: {self.get_location_name(self.current_location)}",
                 bg='#1a1a1a', fg='#ffd700').pack(side=tk.RIGHT, padx=10)
         
-        # кнопка закрытия
         tk.Button(self.window, text="Закрыть",
                  bg='#333', fg='white',
-                 command=self.window.destroy,
+                 command=self.close_window,
                  font=('Arial', 12)).pack(pady=10)
+        
+        self.window.protocol("WM_DELETE_WINDOW", self.close_window)
+    
+    def close_window(self):
+        """Закрытие окна"""
+        MapScreen._instance = None
+        self.window.destroy()
+    
+    def on_map_click(self, event):
+        """Обработка клика по карте"""
+        x, y = event.x, event.y
+        
+        closest_loc = None
+        min_distance = float('inf')
+        
+        for loc_name, (loc_x, loc_y) in self.locations_coords.items():
+            distance = ((x - loc_x) ** 2 + (y - loc_y) ** 2) ** 0.5
+            if distance < 30 and distance < min_distance:
+                min_distance = distance
+                closest_loc = loc_name
+        
+        if closest_loc:
+            self.game.move_to_location(closest_loc)
+            
+            self.current_location = closest_loc
+            self.canvas.delete("all")
+            self.draw_map()
+            
+            for widget in self.window.winfo_children():
+                if isinstance(widget, tk.Frame) and widget.winfo_children():
+                    for child in widget.winfo_children():
+                        if isinstance(child, tk.Label) and "📍" in child.cget("text"):
+                            child.config(text=f"📍 Текущая: {self.get_location_name(closest_loc)}")
     
     def draw_map(self):
         """Рисование карты"""
@@ -149,7 +198,7 @@ class MapScreen:
             # маркер
             self.canvas.create_oval(x-12, y-12, x+12, y+12,
                                    fill=color, outline=outline,
-                                   width=width)
+                                   width=width, tags=(loc_name,))
             
             # название
             display_name = self.get_location_name(loc_name)

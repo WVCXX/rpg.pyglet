@@ -185,7 +185,20 @@ class GameState:
         self.game_version = "1.0.0"
     
     def create_player(self, name: str) -> Dict:
-        """Создание игрока"""
+        """Создание игрока с начальным инвентарем"""
+        inventory = Inventory()
+        
+        # Начальный инвентарь
+        inventory.add_item("weapons", "ржавый_меч", 1)
+        inventory.add_item("weapons", "кинжал", 1)
+        inventory.add_item("armor", "старая_куртка", 1)
+        inventory.add_item("potions", "зелье_здоровья", 3)
+        inventory.add_item("potions", "зелье_маны", 2)
+        inventory.add_item("misc", "факел", 2)
+        inventory.add_item("misc", "веревка", 1)
+        inventory.add_item("misc", "еда", 5)
+        inventory.add_item("misc", "вода", 3)
+        
         return {
             "name": name,
             "health": 100,
@@ -207,7 +220,7 @@ class GameState:
                 "удача": 8
             },
             "skills": {},
-            "inventory": Inventory(),
+            "inventory": inventory,
             "reputation": {
                 "крестьяне": 0,
                 "знать": 0,
@@ -245,6 +258,3 @@ class GameState:
         result["player"] = self.player.copy()
         result["player"]["inventory"] = self.player["inventory"].to_dict()
         return result
-
-#добавлены стаки а так же добавлена возможность более подробно
-#создавать персонажа
