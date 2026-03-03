@@ -72,7 +72,7 @@ class NPC:
         self.profession = profession if profession else random.choice(self.PROFESSIONS)
         self.personality = personality if personality else random.choice(self.PERSONALITIES)
         
-        # Основные характеристики (должны быть до вызова generate_dialog)
+        # Основные характеристики
         self.age = random.randint(16, 80)
         self.relationship = 0  # -100 до 100, отношение к игроку
         self.location = self.generate_start_location()
@@ -84,11 +84,10 @@ class NPC:
         self.inventory = self.generate_inventory()
         self.trade_goods = self.generate_trade_goods() if self.is_merchant else {}
         
-        # ВАЖНО: is_quest_giver должен быть определен ДО generate_dialog
         self.is_quest_giver = random.random() < 0.15
         self.quests_available = []
         
-        # Диалоги и общение (теперь is_quest_giver уже определен)
+        # Диалоги и общение
         self.dialog = self.generate_dialog()
         self.secrets = self.generate_secrets()
         self.gossip = self.generate_gossip()
@@ -117,8 +116,17 @@ class NPC:
         self.history = self.generate_history()
         self.known_locations = [self.location]
     
+    def generate_start_location(self) -> str:
+        """Генерация начальной локации"""
+        locations = [
+            "городская_площадь", "таверна", "рынок", "трущобы", 
+            "храм", "замок", "порт", "кузница", "гильдия",
+            "лес", "кладбище", "подземелье", "башня_мага"
+        ]
+        return random.choice(locations)
+    
     def generate_name(self) -> str:
-        """Генерация полного имени NPC"""
+        """Генерация полного имени NPC (без прозвищ)"""
         if self.gender == "муж":
             first_name = random.choice(self.MALE_NAMES)
         else:
@@ -133,20 +141,7 @@ class NPC:
         else:
             full_name = first_name
         
-        # 30% шанс на прозвище
-        if random.random() < 0.3:
-            nickname = random.choice(self.NICKNAMES)
-            full_name += f" по прозвищу '{nickname}'"
-        
         return full_name
-    
-    def generate_start_location(self) -> str:
-        """Генерация начальной локации"""
-        locations = [
-            "городская_площадь", "таверна", "рынок", "трущобы", 
-            "храм", "замок", "порт", "кузница", "гильдия"
-        ]
-        return random.choice(locations)
     
     def generate_appearance(self) -> Dict[str, str]:
         """Генерация внешности"""
@@ -299,7 +294,7 @@ class NPC:
             "default": "Можешь посмотреть мой товар."
         }
         
-        # Квесты - используем self.is_quest_giver который уже определен
+        # Квесты
         quest_text = "Есть одно дельце... Не поможешь?" if self.is_quest_giver else "Ничего особенного сейчас нет."
         
         # Слухи
@@ -631,6 +626,19 @@ class NPC:
             "money": self.money
         }
     
+    def get_known_traits(self, relationship_level: int) -> List[str]:
+        """Получение известных черт характера в зависимости от отношений"""
+        known_traits = []
+        
+        if relationship_level >= 20:
+            known_traits.extend(self.traits[:2])
+        if relationship_level >= 50:
+            known_traits.extend(self.traits[2:4])
+        if relationship_level >= 80:
+            known_traits.extend(self.traits[4:])
+        
+        return known_traits
+    
     def to_dict(self) -> Dict:
         """Конвертация в словарь для сохранения"""
         return {
@@ -711,5 +719,3 @@ class NPC:
         npc.known_locations = data.get("known_locations", [npc.location])
         
         return npc
-    #добавлены новые диалоги для нпс, так же добавлены расширенные
-    #возмоности

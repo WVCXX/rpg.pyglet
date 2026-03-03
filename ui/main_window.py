@@ -15,12 +15,14 @@ from core.cheats import CheatSystem
 from systems.economy import MarketSystem
 from systems.quests import QuestSystem
 from systems.events import RandomEventGenerator
+from systems.danger_system import DangerSystem
 from entities.npc import NPC
 from ui.character_screen import CharacterScreen
 from ui.map_screen import MapScreen
 from ui.inventory_screen import InventoryScreen
 from ui.death_screen import DeathScreen
 from ui.save_load_screen import SaveLoadScreen
+from ui.dialog_screen import DialogScreen
 
 
 class RPGameWindow:
@@ -52,6 +54,9 @@ class RPGameWindow:
         print("   Создание event_gen...")
         self.event_gen = RandomEventGenerator()
         
+        print("   Создание danger_system...")
+        self.danger_system = DangerSystem(self)
+        
         print("   Инициализация stats...")
         self.stats = self.init_stats()
         
@@ -61,7 +66,6 @@ class RPGameWindow:
         print("   Создание cheat_system...")
         self.cheat_system = CheatSystem(self)
         
-        # Режим бога
         self.godmode = False
         
         print("   Создание интерфейса...")
@@ -138,10 +142,6 @@ class RPGameWindow:
             gender = random.choice(["муж", "жен"])
             name = random.choice(male_names) if gender == "муж" else random.choice(female_names)
             
-            if random.random() < 0.3:
-                nicknames = ["Хитрый", "Сильный", "Мудрый", "Быстрый"]
-                name += f" {random.choice(nicknames)}"
-            
             npc = NPC(
                 f"npc_{i}",
                 name,
@@ -192,7 +192,7 @@ class RPGameWindow:
                                     fg=self.colors['fg_green'],
                                     font=('Arial', 12))
         self.level_label.pack(anchor='w')
-
+        
         center_frame = tk.Frame(header, bg=self.colors['bg_medium'])
         center_frame.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
         
@@ -213,7 +213,7 @@ class RPGameWindow:
         right_frame = tk.Frame(header, bg=self.colors['bg_medium'])
         right_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=20)
         
-
+        # Здоровье
         health_frame = tk.Frame(right_frame, bg=self.colors['bg_medium'])
         health_frame.pack(anchor='e', pady=2)
         
@@ -332,6 +332,9 @@ class RPGameWindow:
         
         # Панель действий
         self.create_action_panel(panel)
+        
+        # Панель локаций (теперь пустая - перемещение через карту)
+        self.create_location_panel(panel)
     
     def create_action_panel(self, parent):
         """Создание панели действий"""
@@ -342,12 +345,23 @@ class RPGameWindow:
             ("🔍 Осмотреть", self.examine),
             ("🗺 Карта", self.show_map),
             ("📊 Характеристики", self.show_character),
+            ("🏆 Ранги", self.show_ranks),
+            ("📖 Дневник", self.show_journal),
+            ("🏠 Дом", self.show_house),
+            ("⚔ Бой", self.enter_combat),
             ("💾 Сохранить", self.save_game),
             ("📂 Загрузить", self.load_game)
         ]
         
-        for text, cmd in actions:
-            btn = tk.Button(panel, text=text,
+        # Разбиваем на две строки
+        row1 = actions[:5]
+        row2 = actions[5:]
+        
+        row1_frame = tk.Frame(panel, bg=self.colors['bg_medium'])
+        row1_frame.pack(fill=tk.X, pady=2)
+        
+        for text, cmd in row1:
+            btn = tk.Button(row1_frame, text=text,
                            bg=self.colors['bg_light'],
                            fg=self.colors['fg_white'],
                            command=cmd,
@@ -355,26 +369,28 @@ class RPGameWindow:
                            padx=10)
             btn.pack(side=tk.LEFT, padx=2, fill=tk.X, expand=True)
         
-        # Кнопки локаций
-        loc_frame = tk.Frame(parent, bg=self.colors['bg_medium'])
-        loc_frame.pack(fill=tk.X, pady=5)
+        row2_frame = tk.Frame(panel, bg=self.colors['bg_medium'])
+        row2_frame.pack(fill=tk.X, pady=2)
         
-        locations = [
-            ("🏛 Площадь", "городская_площадь"),
-            ("🍺 Таверна", "таверна"),
-            ("🏪 Рынок", "рынок"),
-            ("🏚 Трущобы", "трущобы"),
-            ("⛪ Храм", "храм"),
-            ("🏰 Замок", "замок")
-        ]
-        
-        for text, loc in locations:
-            btn = tk.Button(loc_frame, text=text,
+        for text, cmd in row2:
+            btn = tk.Button(row2_frame, text=text,
                            bg=self.colors['bg_light'],
                            fg=self.colors['fg_white'],
-                           command=lambda l=loc: self.move_to_location(l),
-                           relief=tk.FLAT)
+                           command=cmd,
+                           relief=tk.FLAT,
+                           padx=10)
             btn.pack(side=tk.LEFT, padx=2, fill=tk.X, expand=True)
+    
+    def create_location_panel(self, parent):
+        """Создание панели локаций (теперь пустая)"""
+        panel = tk.Frame(parent, bg=self.colors['bg_medium'])
+        panel.pack(fill=tk.X, pady=5)
+        
+        tk.Label(panel, 
+                text="Используй карту (🗺) для перемещения",
+                bg=self.colors['bg_medium'],
+                fg=self.colors['fg_gray'],
+                font=('Arial', 9)).pack()
     
     def create_info_panel(self, parent):
         """Создание информационной панели"""
@@ -491,14 +507,29 @@ class RPGameWindow:
             "рынок": "Торговая площадь",
             "трущобы": "Гнилые трущобы",
             "храм": "Храм Единого",
-            "замок": "Княжеский замок",
+            "замок": "Замок",
             "порт": "Морской порт",
             "кузница": "Кузница гномов",
             "гильдия": "Гильдия искателей",
             "кладбище": "Старое кладбище",
-            "подземелье": "Темные подземелья"
+            "подземелье": "Темные подземелья",
+            "лес": "Темный лес",
+            "башня_мага": "Башня Мага",
+            "притон": "Воровской притон",
+            "тюрьма": "Городская тюрьма",
+            "дворец": "Королевский дворец",
+            "монастырь": "Старый монастырь",
+            "руины": "Древние руины",
+            "пещеры": "Глубокие пещеры"
         }
         return locations.get(location, location.replace('_', ' ').title())
+    
+    def get_preposition(self, location: str) -> str:
+        """Получение правильного предлога для локации"""
+        na_locations = ["городская_площадь", "рынок", "кладбище", "площадь"]
+        if location in na_locations:
+            return "на"
+        return "в"
     
     def add_text(self, text: str, text_type: str = "normal"):
         """Добавление текста"""
@@ -626,22 +657,40 @@ class RPGameWindow:
             bar_length = int(abs(value) / 2)
             bar = "█" * bar_length + "░" * (50 - bar_length)
             
-            self.rep_text.insert(tk.END, f"{group}:\n", ("group",))
-            self.rep_text.insert(tk.END, f"[{bar}] {value}\n\n", ("value", color))
+            self.rep_text.insert(tk.END, f"{group}:\n")
+            self.rep_text.insert(tk.END, f"[{bar}] {value}\n\n")
         
         self.rep_text.config(state=tk.DISABLED)
     
     def move_to_location(self, location_name: str):
         """Перемещение в локацию"""
+        if location_name == self.game_state.current_location:
+            self.add_text(f"\n📍 Ты остаешься в {self.get_location_display(location_name)}", "info")
+            return
+
         self.game_state.current_location = location_name
         self.world.advance_time(10)
         self.stats["шагов_сделано"] += 1
-        
-        self.add_text(f"\n📍 Ты переместился в {self.get_location_display(location_name)}", "info")
-        
+
+        preposition = self.get_preposition(location_name)
+        self.add_text(f"\n📍 Ты {preposition} {self.get_location_display(location_name)}", "info")
+    
+        enemies = self.danger_system.check_location(location_name)
+        if enemies:  # enemies не None и не пустой список
+            self.add_text(f"\n⚔ ВНИМАНИЕ! В локации есть враги!", "warning")
+            for enemy in enemies:
+                self.add_text(f"   • {enemy.name} (ур. {enemy.level}) - ❤ {enemy.health}", "red")
+            self.add_text("   Используй кнопку ⚔ Бой чтобы атаковать!", "info")
+        else:
+            status = self.danger_system.get_location_status(location_name)
+            if status["type"] == "potential":
+                self.add_text(f"\n🕊 В локации безопасно (уровень опасности: {status['level']})", "success")
+            else:
+                self.add_text(f"\n🕊 В локации безопасно", "success")
+
         if random.random() < 0.2:
             self.trigger_random_event()
-        
+
         self.update_ui()
     
     def on_npc_select(self, event):
@@ -654,39 +703,33 @@ class RPGameWindow:
                 
                 for npc in self.npcs.values():
                     if npc.name == npc_name:
-                        self.talk_to_npc(npc)
+                        dialog = DialogScreen(self.root, self.game_state.player, npc, self)
+                        dialog.show()
                         break
-    
-    def talk_to_npc(self, npc: NPC):
-        """Разговор с NPC"""
-        self.add_text(f"\n--- {npc.name} ---", "gold")
-        self.add_text(npc.dialog["greeting"], "info")
-        
-        current_rel = self.game_state.player["relationships"].get(npc.id, 0)
-        current_rel += random.randint(-2, 5)
-        self.game_state.player["relationships"][npc.id] = max(-100, min(100, current_rel))
-        
-        self.stats["диалогов_проведено"] += 1
-        
-        if npc.is_merchant and npc.trade_goods:
-            self.add_text(f"💰 {npc.name}: Хочешь посмотреть товары?", "info")
-        
-        self.update_ui()
     
     def examine(self):
         """Осмотр локации"""
         self.add_text("\n🔍 Ты внимательно осматриваешься...", "info")
         
-        if random.random() < 0.25:
+        # Шанс находки зависит от удачи
+        luck = self.game_state.player["stats"]["удача"]
+        find_chance = 0.15 + (luck * 0.005)  # Базовый шанс 15% + от удачи
+        
+        if random.random() < find_chance:
             items = [
-                ("монета", "misc", 1, random.randint(1, 10)),
-                ("ржавый_меч", "weapons", 1, 0),
-                ("старая_книга", "books", 1, 0),
-                ("зелье_здоровья", "potions", random.randint(1, 3), 0),
-                ("ключ", "keys", 1, 0),
-                ("веревка", "misc", 1, 0),
-                ("факел", "misc", random.randint(1, 3), 0)
+                ("медная_монета", "misc", random.randint(1, 5), 1),
+                ("ржавый_гвоздь", "misc", 1, 0),
+                ("старая_тряпка", "misc", 1, 0),
+                ("сухая_корка", "misc", 1, 0)
             ]
+            
+            # Редкие находки
+            if random.random() < 0.1:  # 10% шанс найти что-то ценное
+                items = [
+                    ("серебряная_монета", "misc", random.randint(1, 3), 5),
+                    ("зелье_здоровья", "potions", 1, 0),
+                    ("сломанный_кинжал", "weapons", 1, 0)
+                ]
             
             item_name, category, count, gold = random.choice(items)
             
@@ -695,13 +738,18 @@ class RPGameWindow:
                 self.add_text(f"💰 Ты нашел {gold} монет!", "success")
                 self.stats["золота_собрано"] += gold
             else:
-                self.game_state.player["inventory"].add_item(category, item_name, count)
-                self.add_text(f"📦 Ты нашел: {item_name.replace('_', ' ').title()} x{count}", "success")
-                self.stats["предметов_найдено"] += count
-            
-            self.update_ui()
+                # Проверка, не превышает ли лимит
+                current_count = self.game_state.player["inventory"].get_item_count(category, item_name)
+                if current_count < 10:  # Лимит на одинаковые предметы
+                    self.game_state.player["inventory"].add_item(category, item_name, count)
+                    self.add_text(f"📦 Ты нашел: {item_name.replace('_', ' ').title()}", "success")
+                    self.stats["предметов_найдено"] += count
+                else:
+                    self.add_text("Ты нашел что-то, но у тебя уже слишком много этого", "system")
         else:
             self.add_text("Ничего интересного.", "system")
+        
+        self.update_ui()
     
     def trigger_random_event(self):
         """Случайное событие"""
@@ -713,6 +761,44 @@ class RPGameWindow:
             if callable(event.get('effect')):
                 event['effect'](self.game_state.player)
     
+    def enter_combat(self):
+        """Вход в бой с врагами в локации"""
+        location = self.game_state.current_location
+        enemies = self.danger_system.current_enemies.get(location, [])
+    
+        # Проверяем, есть ли враги в локации
+        if not enemies:
+            self.add_text("\n🕊 В локации нет врагов", "success")
+            return
+    
+        # Фильтруем живых врагов
+        alive_enemies = [e for e in enemies if e.is_alive]
+    
+        if not alive_enemies:
+            self.add_text("\n🕊 В локации нет живых врагов", "success")
+            self.danger_system.clear_location(location)
+            return
+    
+        # Есть живые враги - начинаем бой
+        self.add_text(f"\n⚔ НАЧАЛО БОЯ! Враги в {self.get_location_display(location)}:", "warning")
+        for enemy in alive_enemies:
+            self.add_text(f"   • {enemy.name} (ур. {enemy.level}) - ❤ {enemy.health}", "red")
+    
+        # Запуск боевой системы
+        try:
+            from systems.combat_system import CombatSystem
+            from ui.combat_screen import CombatScreen
+        
+            combat = CombatSystem(self.game_state.player, alive_enemies, [])
+            combat_screen = CombatScreen(self.root, combat, self)
+            combat_screen.show()
+        except ImportError as e:
+            self.add_text(f"❌ Ошибка загрузки боевой системы: {e}", "warning")
+        except Exception as e:
+            self.add_text(f"❌ Ошибка при начале боя: {e}", "warning")
+            import traceback
+            traceback.print_exc()
+
     def show_cheat_console(self):
         """Показать консоль читов"""
         console = tk.Toplevel(self.root)
@@ -779,18 +865,64 @@ class RPGameWindow:
     
     def show_map(self):
         """Показать карту"""
-        map_screen = MapScreen(self.root, self.world, self.game_state.current_location)
-        map_screen.show()
+        from ui.map_screen import MapScreen
+        map_screen = MapScreen(self.root, self.world, self.game_state.current_location, self)
+        if map_screen is None:
+            pass
     
     def show_character(self):
         """Показать характеристики"""
-        char_screen = CharacterScreen(self.root, self.game_state.player)
+        from ui.character_screen import CharacterScreen
+        char_screen = CharacterScreen(self.root, self.game_state.player, self.update_ui)
         char_screen.show()
     
     def show_inventory_screen(self):
         """Показать полный инвентарь"""
+        from ui.inventory_screen import InventoryScreen
         inv_screen = InventoryScreen(self.root, self.game_state.player["inventory"])
         inv_screen.show()
+    
+    def show_ranks(self):
+        """Показать окно рангов"""
+        try:
+            from systems.rank_system import RankSystem
+            from ui.rank_screen import RankScreen
+            
+            rank_system = RankSystem(self.game_state.player, self.game_state)
+            rank_screen = RankScreen(self.root, rank_system, self)
+            rank_screen.show()
+        except ImportError as e:
+            self.add_text(f"❌ Система рангов не загружена: {e}", "warning")
+        except Exception as e:
+            self.add_text(f"❌ Ошибка при открытии рангов: {e}", "warning")
+    
+    def show_journal(self):
+        """Показать дневник"""
+        try:
+            from systems.journal_system import JournalSystem
+            from ui.journal_screen import JournalScreen
+            
+            journal_system = JournalSystem(self.game_state)
+            journal_screen = JournalScreen(self.root, journal_system, self)
+            journal_screen.show()
+        except ImportError as e:
+            self.add_text(f"❌ Дневник не загружен: {e}", "warning")
+        except Exception as e:
+            self.add_text(f"❌ Ошибка при открытии дневника: {e}", "warning")
+    
+    def show_house(self):
+        """Показать дом"""
+        try:
+            from systems.house_system import HouseSystem
+            from ui.house_screen import HouseScreen
+            
+            house_system = HouseSystem(self.game_state)
+            house_screen = HouseScreen(self.root, house_system, self)
+            house_screen.show()
+        except ImportError as e:
+            self.add_text(f"❌ Система дома не загружена: {e}", "warning")
+        except Exception as e:
+            self.add_text(f"❌ Ошибка при открытии дома: {e}", "warning")
     
     def save_game(self):
         """Сохранение игры"""
@@ -852,7 +984,7 @@ class RPGameWindow:
 ╚══════════════════════════════════════════════════════════════╝
         """
         self.add_text(intro, "gold")
-        self.add_text("\n⚡ Используй кнопки локаций чтобы начать путешествие...", "info")
+        self.add_text("\n⚡ Используй карту (кнопка 🗺) чтобы перемещаться по миру...", "info")
         self.add_text("💡 Горячие клавиши: F1 - помощь, F5 - сохранить, F9 - загрузить, F12 - читы", "system")
     
     def show_help(self):
@@ -861,9 +993,13 @@ class RPGameWindow:
 📖 СПРАВКА:
 
 ⚔ ИГРОВОЙ ПРОЦЕСС:
-  • Перемещайся по локациям используя кнопки внизу
-  • Общайся с NPC для получения квестов и информации
-  • Исследуй мир и находи сокровища
+  • Используй карту (🗺) для перемещения по локациям
+  • Общайся с NPC (👥) для получения квестов и информации
+  • Исследуй мир и находи сокровища (🔍)
+  • Будь осторожен в опасных локациях (⚔)
+  • Получай ранги и титулы (🏆) за достижения
+  • Веди дневник приключений (📖)
+  • Купи и обустрой свой дом (🏠)
 
 ⌨ ГОРЯЧИЕ КЛАВИШИ:
   F1 - эта справка
