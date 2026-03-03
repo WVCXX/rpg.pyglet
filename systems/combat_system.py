@@ -2,17 +2,22 @@ import random
 from typing import Dict, List, Optional, Tuple
 from entities.enemy import Enemy, Boss
 from systems.skill_system import SkillSystem
+from systems.animation_system import AnimationSystem
+from systems.sound_system import SoundSystem
 
 class CombatSystem:
-    """Полноценная боевая система"""
+    """Полноценная боевая система с анимациями и звуками"""
     
-    def __init__(self, player, enemies: List[Enemy], companions: List = None):
+    def __init__(self, player, enemies: List[Enemy], companions: List = None, 
+                 animation_system=None, sound_system=None):
         self.player = player
         self.enemies = enemies
         self.companions = companions or []
         
-        # Инициализация системы навыков
+        # Системы
         self.skill_system = SkillSystem(player)
+        self.anim = animation_system
+        self.sound = sound_system
         
         # Состояние боя
         self.combat_log = []
@@ -39,6 +44,10 @@ class CombatSystem:
         
         # Инициализация боя
         self.init_combat()
+        
+        # Воспроизводим музыку боя
+        if self.sound:
+            self.sound.play_music("battle", loop=True)
     
     def init_combat(self):
         """Инициализация боя"""
@@ -49,7 +58,7 @@ class CombatSystem:
         for i, enemy in enumerate(self.enemies):
             all_combatants.append((f"enemy_{i}", enemy))
         
-        # Расчет инициативы
+        # Расчет инициативы с учетом навыков
         self.turn_order = sorted(
             all_combatants,
             key=lambda x: self.calculate_initiative(x[1]),
@@ -60,6 +69,10 @@ class CombatSystem:
         self.add_to_log(f"Противников: {len(self.enemies)}")
         if self.companions:
             self.add_to_log(f"Союзников: {len(self.companions)}")
+        
+        # Звук начала боя
+        if self.sound:
+            self.sound.play_sound("sword")
     
     def calculate_initiative(self, combatant) -> int:
         """Расчет инициативы"""
@@ -68,6 +81,10 @@ class CombatSystem:
         else:
             base = 10 + combatant.get("stats", {}).get("ловкость", 0) * 2
         
+        # Бонус от навыков
+        if "initiative" in combatant:
+            base += combatant["initiative"]
+        
         return base + random.randint(1, 20)
     
     def add_to_log(self, message: str):
@@ -75,7 +92,7 @@ class CombatSystem:
         self.combat_log.append(message)
         print(f"[COMBAT] {message}")
     
-    def player_turn(self, action: str, target_index: int = 0, skill_id: str = None) -> Dict:
+    def player_turn(self, action: str, target_index: int = 0, skill_id: str = None, x=None, y=None) -> Dict:
         """Ход игрока"""
         result = {
             "success": False,
@@ -91,18 +108,22 @@ class CombatSystem:
         
         if target_index >= len(self.enemies):
             result["message"] = "❌ Нет такой цели!"
+            if self.sound:
+                self.sound.play_error()
             return result
         
         target = self.enemies[target_index]
         
         # Выполнение действия
         if action == "attack":
-            result = self.player_attack(target)
+            result = self.player_attack(target, x, y)
         elif action == "skill":
             if skill_id:
-                result = self.player_use_skill(skill_id, target)
+                result = self.player_use_skill(skill_id, target, x, y)
             else:
                 result["message"] = "❌ Не выбрано умение!"
+                if self.sound:
+                    self.sound.play_error()
         elif action == "defend":
             result = self.player_defend()
         elif action == "flee":
@@ -113,9 +134,21 @@ class CombatSystem:
             self.add_to_log(f"💀 {target.name} повержен!")
             self.enemies.remove(target)
             
+            # Анимация смерти
+            if self.anim and x and y:
+                self.anim.explosion_animation(x, y, "#440000")
+            
+            # Звук смерти
+            if self.sound:
+                self.sound.play_death()
+            
             # Награда
             self.player["exp"] += target.exp_reward
             self.player["money"] += target.gold_reward
+            
+            # Обновляем статистику
+            if "врагов_убито" in self.player:
+                self.player["врагов_убито"] += 1
             
             # Шанс на лут
             self.drop_loot(target)
@@ -132,7 +165,7 @@ class CombatSystem:
         result["success"] = True
         return result
     
-    def player_attack(self, target: Enemy) -> Dict:
+    def player_attack(self, target: Enemy, x=None, y=None) -> Dict:
         """Обычная атака"""
         result = {
             "damage": 0,
@@ -152,25 +185,48 @@ class CombatSystem:
         
         # Критический удар
         crit_chance = self.player["stats"]["удача"] / 100
-        if random.random() < crit_chance:
+        is_critical = random.random() < crit_chance
+        
+        if is_critical:
             damage *= 2
             self.add_to_log("⚡ КРИТИЧЕСКИЙ УДАР!")
             result["effects"].append("critical")
+            
+            # Звук крита
+            if self.sound:
+                self.sound.play_critical()
+            
+            # Анимация крита
+            if self.anim and x and y:
+                self.anim.floating_text(x, y-50, "КРИТ!", "#ff8800")
+        else:
+            # Звук атаки
+            if self.sound:
+                self.sound.play_attack()
         
         # Проверка на уклонение
         if hasattr(target, 'dodge_chance'):
             if random.random() < target.dodge_chance:
                 result["message"] = f"💨 {target.name} уклонился!"
+                
+                # Анимация уклонения
+                if self.anim and x and y:
+                    self.anim.floating_text(x, y, "УКЛОН", "#88ff88")
+                
                 return result
         
         actual_damage = target.take_damage(damage)
         result["damage"] = actual_damage
         result["message"] = f"⚔ Ты атакуешь {target.name} и наносишь {actual_damage} урона!"
         
+        # Анимация урона
+        if self.anim and x and y:
+            self.anim.damage_text(x, y, actual_damage, is_critical)
+        
         self.add_to_log(result["message"])
         return result
     
-    def player_use_skill(self, skill_id: str, target: Enemy) -> Dict:
+    def player_use_skill(self, skill_id: str, target: Enemy, x=None, y=None) -> Dict:
         """Использование навыка"""
         result = {
             "damage": 0,
@@ -182,6 +238,8 @@ class CombatSystem:
         # Проверка кулдауна
         if skill_id in self.cooldowns["player"]:
             result["message"] = f"⏳ Навык еще перезаряжается ({self.cooldowns['player'][skill_id]} ходов)"
+            if self.sound:
+                self.sound.play_error()
             return result
         
         # Получение информации о навыке
@@ -194,9 +252,34 @@ class CombatSystem:
         mana_cost = skill_info.get("mana_cost", 0)
         if self.player["mana"] < mana_cost:
             result["message"] = f"❌ Недостаточно маны! Нужно {mana_cost}"
+            if self.sound:
+                self.sound.play_error()
             return result
         
         self.player["mana"] -= mana_cost
+        
+        # Анимация в зависимости от навыка
+        if self.anim and x and y:
+            if "огонь" in skill_info["name"].lower() or "fire" in skill_id:
+                self.anim.fireball_animation(x, y)
+                if self.sound:
+                    self.sound.play_sound("fireball")
+            elif "лед" in skill_info["name"].lower() or "ice" in skill_id:
+                self.anim.magic_animation(x, y, "#88ccff", "ice")
+                if self.sound:
+                    self.sound.play_sound("magic")
+            elif "лечение" in skill_info["name"].lower() or "heal" in skill_id:
+                self.anim.heal_animation(x, y)
+                if self.sound:
+                    self.sound.play_heal()
+            elif "щит" in skill_info["name"].lower() or "shield" in skill_id:
+                self.anim.shield_animation(x, y)
+                if self.sound:
+                    self.sound.play_block()
+            else:
+                self.anim.magic_animation(x, y, skill_info.get("tree_color", "#4444ff"))
+                if self.sound:
+                    self.sound.play_sound("magic")
         
         # Применение эффектов навыка
         if "base_damage" in skill_info:
@@ -209,20 +292,28 @@ class CombatSystem:
             result["damage"] = actual_damage
             result["message"] = f"✨ {skill_info['name']} наносит {actual_damage} урона!"
             
+            # Анимация урона
+            if self.anim and x and y:
+                self.anim.damage_text(x, y, actual_damage)
+            
             # Дополнительные эффекты
             if "fire_damage" in skill_info.get("effects", {}):
                 result["effects"].append("burn")
                 self.add_to_log(f"🔥 {target.name} горит!")
+                if self.anim:
+                    self.anim.floating_text(x, y, "ГОРИТ!", "#ff4400")
             
             if "slow" in skill_info.get("effects", {}):
                 result["effects"].append("slow")
                 self.add_to_log(f"❄️ {target.name} замедлен!")
             
             if "lifesteal" in skill_info.get("effects", {}):
-                heal = actual_damage * 0.2
+                heal = int(actual_damage * 0.2)
                 self.player["health"] = min(self.player["max_health"], self.player["health"] + heal)
                 result["heal"] = heal
-                self.add_to_log(f"❤️ Ты восстанавливаешь {int(heal)} здоровья!")
+                self.add_to_log(f"❤️ Ты восстанавливаешь {heal} здоровья!")
+                if self.anim:
+                    self.anim.heal_text(x, y, heal)
         
         elif "base_heal" in skill_info:
             # Лечащий навык
@@ -232,10 +323,16 @@ class CombatSystem:
             self.player["health"] = min(self.player["max_health"], self.player["health"] + heal)
             result["heal"] = heal
             result["message"] = f"💚 {skill_info['name']} восстанавливает {heal} здоровья!"
+            
+            if self.anim:
+                self.anim.heal_text(x, y, heal)
         
         # Установка кулдауна
         cooldown = skill_info.get("cooldown", 1)
         self.cooldowns["player"][skill_id] = cooldown
+        
+        # Добавляем прогресс навыка
+        self.skill_system.add_skill_progress(skill_id, 10)
         
         self.add_to_log(result["message"])
         return result
@@ -250,6 +347,14 @@ class CombatSystem:
             "message": "🛡 Ты принимаешь защитную стойку! Получаемый урон снижен на 50%"
         }
         
+        # Анимация щита
+        if self.anim:
+            self.anim.shield_animation(400, 300)
+        
+        # Звук блока
+        if self.sound:
+            self.sound.play_block()
+        
         self.add_to_log(result["message"])
         return result
     
@@ -263,11 +368,16 @@ class CombatSystem:
                 "damage": 0,
                 "message": "🏃 Ты успешно сбежал с поля боя!"
             }
+            # Звук побега
+            if self.sound:
+                self.sound.play_sound("click")
         else:
             result = {
                 "damage": 0,
                 "message": "❌ Не удалось сбежать!"
             }
+            if self.sound:
+                self.sound.play_error()
         
         self.add_to_log(result["message"])
         return result
@@ -282,6 +392,16 @@ class CombatSystem:
         # Выбор цели
         target = self.select_target()
         
+        # Получаем координаты для анимации (примерные)
+        target_x = 400
+        target_y = 300
+        enemy_x = 100
+        enemy_y = 100
+        
+        # Анимация атаки врага
+        if self.anim:
+            self.anim.attack_animation(enemy_x, enemy_y, target_x, target_y, "#ff0000")
+        
         # Выбор действия
         action_result = {"damage": 0, "message": ""}
         
@@ -291,6 +411,10 @@ class CombatSystem:
             ability_result = enemy.use_ability(ability_name, target)
             action_result["damage"] = ability_result.get("damage", 0)
             action_result["message"] = ability_result.get("message", f"{enemy.name} использует {ability_name}!")
+            
+            # Анимация способности врага
+            if self.anim:
+                self.anim.magic_animation(target_x, target_y, "#ff0000")
         else:
             # Обычная атака
             damage = enemy.attack(target)
@@ -305,11 +429,19 @@ class CombatSystem:
         if target == self.player:
             self.player["health"] -= action_result["damage"]
             
+            # Анимация получения урона
+            if self.anim and action_result["damage"] > 0:
+                self.anim.damage_text(target_x, target_y, action_result["damage"])
+            
             if self.player["health"] <= 0:
                 self.player["health"] = 0
                 self.defeat = True
                 self.combat_active = False
                 action_result["message"] += " 💀 Ты повержен!"
+                
+                # Анимация смерти
+                if self.anim:
+                    self.anim.explosion_animation(target_x, target_y, "#ff0000")
         
         self.add_to_log(action_result["message"])
         return action_result
@@ -337,6 +469,10 @@ class CombatSystem:
             self.player["health"] = min(self.player["max_health"], self.player["health"] + regen)
             if regen > 0:
                 self.add_to_log(f"💚 Регенерация восстанавливает {regen} здоровья")
+        
+        if "mana_regen" in self.player:
+            mana_regen = self.player["mana_regen"]
+            self.player["mana"] = min(self.player["max_mana"], self.player["mana"] + mana_regen)
     
     def drop_loot(self, enemy: Enemy):
         """Выпадение лута"""
@@ -346,6 +482,10 @@ class CombatSystem:
                     category = self.get_item_category(item)
                     self.player["inventory"].add_item(category, item, 1)
                     self.add_to_log(f"📦 Найден предмет: {item}")
+                    
+                    # Анимация лута
+                    if self.anim:
+                        self.anim.floating_text(400, 300, f"+{item}", "#ffd700")
     
     def get_item_category(self, item: str) -> str:
         """Определение категории предмета"""
@@ -367,6 +507,9 @@ class CombatSystem:
     def next_turn(self) -> Tuple[str, Dict]:
         """Следующий ход"""
         if not self.combat_active:
+            # Останавливаем музыку боя при завершении
+            if self.sound:
+                self.sound.stop_music()
             return "combat_end", {}
         
         self.current_turn_index = (self.current_turn_index + 1) % len(self.turn_order)
@@ -391,8 +534,18 @@ class CombatSystem:
             self.add_to_log("🎉 ПОБЕДА! Все враги повержены.")
             
             # Бонус за победу
-            self.player["exp"] += 50
-            self.add_to_log(f"✨ Бонус: +50 опыта")
+            bonus_exp = 50 + len(self.enemies) * 10
+            self.player["exp"] += bonus_exp
+            self.add_to_log(f"✨ Бонус: +{bonus_exp} опыта")
+            
+            # Победная музыка
+            if self.sound:
+                self.sound.stop_music()
+                self.sound.play_music("victory", loop=False)
+            
+            # Анимация победы
+            if self.anim:
+                self.anim.level_up_animation(400, 300)
             
             return True
         
@@ -400,6 +553,11 @@ class CombatSystem:
             self.defeat = True
             self.combat_active = False
             self.add_to_log("💔 ПОРАЖЕНИЕ...")
+            
+            if self.sound:
+                self.sound.stop_music()
+                self.sound.play_death()
+            
             return True
         
         return False

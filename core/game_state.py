@@ -7,7 +7,7 @@ class ItemStackContainer:
     def __init__(self, name: str, max_stack: int):
         self.name = name
         self.max_stack = max_stack
-        self._items: Dict[str, int] = {}  
+        self._items: Dict[str, int] = {}
     
     def add(self, item: str, count: int = 1) -> bool:
         """Добавление предмета"""
@@ -177,49 +177,142 @@ class Inventory:
 
 
 class GameState:
-    def __init__(self, player_name: str = "Джериан"):
-        self.player = self.create_player(player_name)
+    def __init__(self, player_name: str = "Джериан", race: str = "человек", player_class: str = "воин"):
+        self.player = self.create_player(player_name, race, player_class)
         self.current_location = "городская_площадь"
         self.game_running = True
         self.play_time = 0
         self.game_version = "1.0.0"
+        
+        # Система рангов и титулов
+        self.rank = "Новичок"
+        self.rank_points = 0
+        self.titles = []
+        self.current_title = None
+        
+        # Дневник приключений
+        self.journal = {
+            "quests": [],
+            "discoveries": [],
+            "enemies_killed": {},
+            "items_found": [],
+            "notes": []
+        }
+        
+        # Свой дом
+        self.house = {
+            "owned": False,
+            "location": None,
+            "level": 1,
+            "furniture": [],
+            "storage": Inventory(),
+            "upgrades": []
+        }
     
-    def create_player(self, name: str) -> Dict:
-        """Создание игрока с начальным инвентарем"""
+    def create_player(self, name: str, race: str, player_class: str) -> Dict:
+        """Создание игрока с учетом расы и класса"""
         inventory = Inventory()
         
-        # Начальный инвентарь
-        inventory.add_item("weapons", "ржавый_меч", 1)
+        # Базовый инвентарь
         inventory.add_item("weapons", "кинжал", 1)
         inventory.add_item("armor", "старая_куртка", 1)
         inventory.add_item("potions", "зелье_здоровья", 3)
-        inventory.add_item("potions", "зелье_маны", 2)
         inventory.add_item("misc", "факел", 2)
-        inventory.add_item("misc", "веревка", 1)
         inventory.add_item("misc", "еда", 5)
-        inventory.add_item("misc", "вода", 3)
+        
+        # Базовые характеристики
+        base_stats = {
+            "сила": 8,
+            "ловкость": 8,
+            "интеллект": 8,
+            "мудрость": 8,
+            "харизма": 8,
+            "удача": 8,
+            "выносливость": 8
+        }
+        
+        # Бонусы расы
+        race_bonuses = {
+            "человек": {"удача": 2, "харизма": 2},  # Универсалы
+            "эльф": {"ловкость": 3, "интеллект": 3, "выносливость": -2},  # Маги и лучники
+            "гном": {"сила": 3, "выносливость": 3, "ловкость": -2},  # Воины и ремесленники
+            "орк": {"сила": 5, "выносливость": 3, "интеллект": -3, "мудрость": -3},  # Чистая сила
+            "демон": {"сила": 2, "интеллект": 2, "харизма": -2, "удача": -2},  # Темная магия
+            "зверолюд": {"сила": 2, "ловкость": 2, "интеллект": -2, "харизма": -2}  # Дикая натура
+        }
+        
+        # Применяем бонусы расы
+        if race in race_bonuses:
+            for stat, bonus in race_bonuses[race].items():
+                base_stats[stat] = max(1, base_stats[stat] + bonus)
+        
+        # Бонусы класса
+        class_bonuses = {
+            "воин": {
+                "stats": {"сила": 3, "выносливость": 3},
+                "inventory": {"weapons": "ржавый_меч"},
+                "skill": "сильный_удар"
+            },
+            "маг": {
+                "stats": {"интеллект": 4, "мудрость": 2},
+                "inventory": {"weapons": "посох_ученика"},
+                "skill": "огненный_шар"
+            },
+            "вор": {
+                "stats": {"ловкость": 4, "удача": 2},
+                "inventory": {"weapons": "острый_клинок"},
+                "skill": "удар_в_спину"
+            },
+            "жрец": {
+                "stats": {"мудрость": 3, "харизма": 3},
+                "inventory": {"weapons": "священный_символ"},
+                "skill": "лечение"
+            },
+            "паладин": {
+                "stats": {"сила": 2, "выносливость": 2, "мудрость": 2},
+                "inventory": {"weapons": "стальной_меч", "armor": "щит"},
+                "skill": "божественный_удар"
+            },
+            "охотник": {
+                "stats": {"ловкость": 3, "выносливость": 2, "удача": 1},
+                "inventory": {"weapons": "короткий_лук"},
+                "skill": "меткий_выстрел"
+            }
+        }
+        
+        if player_class in class_bonuses:
+            bonuses = class_bonuses[player_class]
+            
+            # Бонусы к статам
+            for stat, bonus in bonuses["stats"].items():
+                base_stats[stat] += bonus
+            
+            # Бонусный инвентарь
+            for cat, item in bonuses["inventory"].items():
+                inventory.add_item(cat, item, 1)
+            
+            # Начальный навык
+            starting_skill = bonuses["skill"]
+        else:
+            starting_skill = None
         
         return {
             "name": name,
-            "health": 100,
-            "max_health": 100,
+            "race": race,
+            "class": player_class,
+            "health": 100 + (base_stats["выносливость"] * 5),
+            "max_health": 100 + (base_stats["выносливость"] * 5),
             "stamina": 100,
             "max_stamina": 100,
-            "mana": 50,
-            "max_mana": 50,
+            "mana": 50 + (base_stats["интеллект"] * 3),
+            "max_mana": 50 + (base_stats["интеллект"] * 3),
             "money": 50,
             "exp": 0,
             "level": 1,
             "stat_points": 0,
-            "stats": {
-                "сила": 8,
-                "ловкость": 8,
-                "интеллект": 8,
-                "мудрость": 8,
-                "харизма": 8,
-                "удача": 8
-            },
-            "skills": {},
+            "skill_points": 1,  # Одно очко навыка на старте
+            "stats": base_stats,
+            "skills": {starting_skill: 1} if starting_skill else {},
             "inventory": inventory,
             "reputation": {
                 "крестьяне": 0,
@@ -227,7 +320,10 @@ class GameState:
                 "торговцы": 0,
                 "стража": 0,
                 "церковь": 0,
-                "воры": 0
+                "воры": 0,
+                "гильдия_магов": 0,
+                "гильдия_воров": 0,
+                "гильдия_воинов": 0
             },
             "relationships": {},
             "flags": {},
@@ -236,7 +332,9 @@ class GameState:
             "diseases": [],
             "injuries": [],
             "achievements": [],
-            "death_count": 0
+            "death_count": 0,
+            "titles": ["Новичок"],
+            "current_title": "Новичок"
         }
     
     @classmethod

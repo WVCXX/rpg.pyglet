@@ -345,13 +345,35 @@ class RPGameWindow:
             ("🔍 Осмотреть", self.examine),
             ("🗺 Карта", self.show_map),
             ("📊 Характеристики", self.show_character),
+            ("🏆 Ранги", self.show_ranks),
+            ("📖 Дневник", self.show_journal),
+            ("🏠 Дом", self.show_house),
             ("⚔ Бой", self.enter_combat),
             ("💾 Сохранить", self.save_game),
             ("📂 Загрузить", self.load_game)
         ]
         
-        for text, cmd in actions:
-            btn = tk.Button(panel, text=text,
+        # Разбиваем на две строки
+        row1 = actions[:5]
+        row2 = actions[5:]
+        
+        row1_frame = tk.Frame(panel, bg=self.colors['bg_medium'])
+        row1_frame.pack(fill=tk.X, pady=2)
+        
+        for text, cmd in row1:
+            btn = tk.Button(row1_frame, text=text,
+                           bg=self.colors['bg_light'],
+                           fg=self.colors['fg_white'],
+                           command=cmd,
+                           relief=tk.FLAT,
+                           padx=10)
+            btn.pack(side=tk.LEFT, padx=2, fill=tk.X, expand=True)
+        
+        row2_frame = tk.Frame(panel, bg=self.colors['bg_medium'])
+        row2_frame.pack(fill=tk.X, pady=2)
+        
+        for text, cmd in row2:
+            btn = tk.Button(row2_frame, text=text,
                            bg=self.colors['bg_light'],
                            fg=self.colors['fg_white'],
                            command=cmd,
@@ -652,20 +674,19 @@ class RPGameWindow:
 
         preposition = self.get_preposition(location_name)
         self.add_text(f"\n📍 Ты {preposition} {self.get_location_display(location_name)}", "info")
-
     
         enemies = self.danger_system.check_location(location_name)
         if enemies:  # enemies не None и не пустой список
             self.add_text(f"\n⚔ ВНИМАНИЕ! В локации есть враги!", "warning")
-        for enemy in enemies:
-            self.add_text(f"   • {enemy.name} (ур. {enemy.level}) - ❤ {enemy.health}", "red")
+            for enemy in enemies:
+                self.add_text(f"   • {enemy.name} (ур. {enemy.level}) - ❤ {enemy.health}", "red")
             self.add_text("   Используй кнопку ⚔ Бой чтобы атаковать!", "info")
         else:
             status = self.danger_system.get_location_status(location_name)
-        if status["type"] == "potential":
-            self.add_text(f"\n🕊 В локации безопасно (уровень опасности: {status['level']})", "success")
-        else:
-            self.add_text(f"\n🕊 В локации безопасно", "success")
+            if status["type"] == "potential":
+                self.add_text(f"\n🕊 В локации безопасно (уровень опасности: {status['level']})", "success")
+            else:
+                self.add_text(f"\n🕊 В локации безопасно", "success")
 
         if random.random() < 0.2:
             self.trigger_random_event()
@@ -745,12 +766,12 @@ class RPGameWindow:
         location = self.game_state.current_location
         enemies = self.danger_system.current_enemies.get(location, [])
     
-    # Проверяем, есть ли враги в локации
+        # Проверяем, есть ли враги в локации
         if not enemies:
             self.add_text("\n🕊 В локации нет врагов", "success")
             return
     
-    # Фильтруем живых врагов
+        # Фильтруем живых врагов
         alive_enemies = [e for e in enemies if e.is_alive]
     
         if not alive_enemies:
@@ -758,12 +779,12 @@ class RPGameWindow:
             self.danger_system.clear_location(location)
             return
     
-    # Есть живые враги - начинаем бой
+        # Есть живые враги - начинаем бой
         self.add_text(f"\n⚔ НАЧАЛО БОЯ! Враги в {self.get_location_display(location)}:", "warning")
         for enemy in alive_enemies:
             self.add_text(f"   • {enemy.name} (ур. {enemy.level}) - ❤ {enemy.health}", "red")
     
-    # Запуск боевой системы
+        # Запуск боевой системы
         try:
             from systems.combat_system import CombatSystem
             from ui.combat_screen import CombatScreen
@@ -775,8 +796,8 @@ class RPGameWindow:
             self.add_text(f"❌ Ошибка загрузки боевой системы: {e}", "warning")
         except Exception as e:
             self.add_text(f"❌ Ошибка при начале боя: {e}", "warning")
-        import traceback
-        traceback.print_exc()
+            import traceback
+            traceback.print_exc()
 
     def show_cheat_console(self):
         """Показать консоль читов"""
@@ -851,13 +872,57 @@ class RPGameWindow:
     
     def show_character(self):
         """Показать характеристики"""
+        from ui.character_screen import CharacterScreen
         char_screen = CharacterScreen(self.root, self.game_state.player, self.update_ui)
         char_screen.show()
     
     def show_inventory_screen(self):
         """Показать полный инвентарь"""
+        from ui.inventory_screen import InventoryScreen
         inv_screen = InventoryScreen(self.root, self.game_state.player["inventory"])
         inv_screen.show()
+    
+    def show_ranks(self):
+        """Показать окно рангов"""
+        try:
+            from systems.rank_system import RankSystem
+            from ui.rank_screen import RankScreen
+            
+            rank_system = RankSystem(self.game_state.player, self.game_state)
+            rank_screen = RankScreen(self.root, rank_system, self)
+            rank_screen.show()
+        except ImportError as e:
+            self.add_text(f"❌ Система рангов не загружена: {e}", "warning")
+        except Exception as e:
+            self.add_text(f"❌ Ошибка при открытии рангов: {e}", "warning")
+    
+    def show_journal(self):
+        """Показать дневник"""
+        try:
+            from systems.journal_system import JournalSystem
+            from ui.journal_screen import JournalScreen
+            
+            journal_system = JournalSystem(self.game_state)
+            journal_screen = JournalScreen(self.root, journal_system, self)
+            journal_screen.show()
+        except ImportError as e:
+            self.add_text(f"❌ Дневник не загружен: {e}", "warning")
+        except Exception as e:
+            self.add_text(f"❌ Ошибка при открытии дневника: {e}", "warning")
+    
+    def show_house(self):
+        """Показать дом"""
+        try:
+            from systems.house_system import HouseSystem
+            from ui.house_screen import HouseScreen
+            
+            house_system = HouseSystem(self.game_state)
+            house_screen = HouseScreen(self.root, house_system, self)
+            house_screen.show()
+        except ImportError as e:
+            self.add_text(f"❌ Система дома не загружена: {e}", "warning")
+        except Exception as e:
+            self.add_text(f"❌ Ошибка при открытии дома: {e}", "warning")
     
     def save_game(self):
         """Сохранение игры"""
@@ -932,6 +997,9 @@ class RPGameWindow:
   • Общайся с NPC (👥) для получения квестов и информации
   • Исследуй мир и находи сокровища (🔍)
   • Будь осторожен в опасных локациях (⚔)
+  • Получай ранги и титулы (🏆) за достижения
+  • Веди дневник приключений (📖)
+  • Купи и обустрой свой дом (🏠)
 
 ⌨ ГОРЯЧИЕ КЛАВИШИ:
   F1 - эта справка
